@@ -1,0 +1,42 @@
+{
+  "name": "operations-agency-platform",
+  "productName": "منصة وكالة التشغيل",
+  "version": "1.0.0",
+  "description": "منصة وكالة التشغيل - تطبيق سطح المكتب",
+  "main": "main.js",
+  "author": "Operations Agency",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win portable nsis --x64"
+  },
+  "build": {
+    "appId": "com.operations.agency.platform",
+    "productName": "منصة وكالة التشغيل",
+    "files": [
+      "main.js",
+      "app/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "منصة وكالة التشغيل",
+      "language": "1025",
+      "artifactName": "Operations-Agency-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Operations-Agency-Portable-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "38.2.0",
+    "electron-builder": "26.0.12"
+  }
+}
