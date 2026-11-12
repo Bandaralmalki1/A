@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>لوحة المدير — المنصة الجغرافية المرجعية</title>
+  <link rel="stylesheet" href="/ui.css">
+</head>
+<body>
+<main class="wrap stack">
+  <header class="row between">
+    <div>
+      <p class="muted">المنصة الجغرافية المرجعية</p>
+      <h1>لوحة المدير: أكواد الدخول</h1>
+    </div>
+    <div class="row" id="tools" hidden>
+      <a class="btn small" href="/" target="_blank" rel="noopener">فتح المنصة</a>
+      <a class="btn small" href="/api/admin/backup" download>نسخة احتياطية</a>
+      <button class="small" type="button" id="logout">خروج المدير</button>
+    </div>
+  </header>
+
+  <!-- دخول المدير -->
+  <section id="gate" class="panel stack" hidden>
+    <h2>دخول المدير</h2>
+    <form id="gateForm" class="stack" novalidate>
+      <div>
+        <label for="pw">كلمة مرور المدير</label>
+        <input id="pw" name="password" type="password" autocomplete="current-password" aria-describedby="gateErr" required>
+      </div>
+      <p id="gateErr" class="alert" role="alert" hidden></p>
+      <div><button class="primary" type="submit" id="gateGo">دخول</button></div>
+    </form>
+  </section>
+
+  <div id="board" class="stack" hidden>
+    <!-- إنشاء كود -->
+    <section class="panel stack" aria-labelledby="newTitle">
+      <h2 id="newTitle">إنشاء كود جديد</h2>
+      <form id="newForm" class="stack" novalidate>
+        <div class="row" style="align-items:flex-start">
+          <div class="field">
+            <label for="nLabel">اسم صاحب الكود</label>
+            <input id="nLabel" name="label" type="text" maxlength="80" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="nRole">الصلاحية</label>
+            <select id="nRole" name="role"></select>
+          </div>
+          <div class="field">
+            <label for="nExp">مدة الصلاحية</label>
+            <select id="nExp" name="exp">
+              <option value="">بلا انتهاء</option>
+              <option value="1">يوم واحد</option>
+              <option value="7">أسبوع</option>
+              <option value="30" selected>شهر</option>
+              <option value="90">3 أشهر</option>
+              <option value="365">سنة</option>
+              <option value="custom">تاريخ محدد…</option>
+            </select>
+          </div>
+          <div class="field" id="nAtWrap" hidden>
+            <label for="nAt">ينتهي في</label>
+            <input id="nAt" name="at" type="datetime-local">
+          </div>
+          <div class="field">
+            <label for="nDev">عدد الأجهزة</label>
+            <input id="nDev" name="devices" type="number" inputmode="numeric" min="0" max="50" value="1" aria-describedby="nDevHint">
+            <p class="hint" id="nDevHint">0 = بلا قيد</p>
+          </div>
+        </div>
+        <p id="newErr" class="alert" role="alert" hidden></p>
+        <div><button class="primary" type="submit" id="newGo">إنشاء الكود</button></div>
+      </form>
+    </section>
+
+    <section class="stack" aria-labelledby="listTitle">
+      <div class="row between">
+        <h2 id="listTitle" tabindex="-1">الأكواد <span class="muted" id="count"></span></h2>
+        <button class="small" type="button" id="refresh">تحديث</button>
+      </div>
+      <p id="live" class="status-line" role="status" aria-live="polite"></p>
+      <div id="listErr" class="alert stack" role="alert" hidden>
+        <span id="listErrMsg"></span>
+        <div><button class="small" type="button" id="retry">إعادة المحاولة</button></div>
+      </div>
+      <p id="loading" class="muted" role="status">جارٍ تحميل الأكواد…</p>
+      <p id="empty" class="empty" hidden>لا توجد أكواد بعد. أنشئ أول كود من النموذج أعلاه ثم أرسله لصاحبه.</p>
+      <ul id="codes" class="codes"></ul>
+    </section>
+
+    <details id="logBox">
+      <summary>آخر محاولات الدخول</summary>
+      <div class="scroll"><table>
+        <thead><tr><th scope="col">الوقت</th><th scope="col">صاحب الكود</th><th scope="col">النتيجة</th><th scope="col">العنوان</th></tr></thead>
+        <tbody id="logRows"><tr><td colspan="4" class="muted">جارٍ التحميل…</td></tr></tbody>
+      </table></div>
+    </details>
+  </div>
+</main>
+
+<!-- الكود الجديد يظهر مرة واحدة -->
+<dialog id="shown" aria-labelledby="shownTitle">
+  <div class="stack">
+    <h2 id="shownTitle">الكود جاهز</h2>
+    <p>انسخه وأرسله إلى <strong id="shownFor"></strong>. <strong>لن يظهر مرة أخرى</strong> بعد إغلاق هذه النافذة؛ إن ضاع استخدم «إعادة توليد».</p>
+    <p class="bigcode mono" id="shownCode"></p>
+    <p class="status-line" id="copied" role="status"></p>
+    <div class="row">
+      <button class="primary" type="button" id="copy">نسخ الكود</button>
+      <button type="button" id="shownClose">تم</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="edit" aria-labelledby="editTitle">
+  <form id="editForm" class="stack" novalidate>
+    <h2 id="editTitle">تعديل الكود</h2>
+    <div><label for="eLabel">اسم صاحب الكود</label><input id="eLabel" type="text" maxlength="80" autocomplete="off" required></div>
+    <div><label for="eRole">الصلاحية</label><select id="eRole"></select></div>
+    <div>
+      <label for="eExp">مدة الصلاحية</label>
+      <select id="eExp">
+        <option value="keep">كما هي</option>
+        <option value="">بلا انتهاء</option>
+        <option value="1">يوم واحد من الآن</option>
+        <option value="7">أسبوع من الآن</option>
+        <option value="30">شهر من الآن</option>
+        <option value="90">3 أشهر من الآن</option>
+        <option value="365">سنة من الآن</option>
+        <option value="custom">تاريخ محدد…</option>
+      </select>
+      <p class="hint" id="eExpNow"></p>
+    </div>
+    <div id="eAtWrap" hidden><label for="eAt">ينتهي في</label><input id="eAt" type="datetime-local"></div>
+    <div><label for="eDev">عدد الأجهزة</label><input id="eDev" type="number" inputmode="numeric" min="0" max="50" aria-describedby="eDevHint"><p class="hint" id="eDevHint">0 = بلا قيد</p></div>
+    <p id="editErr" class="alert" role="alert" hidden></p>
+    <div class="row">
+      <button class="primary" type="submit" id="editGo">حفظ</button>
+      <button type="button" id="editCancel">إلغاء</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirm" aria-labelledby="confirmTitle">
+  <div class="stack">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmText"></p>
+    <p id="confirmErr" class="alert" role="alert" hidden></p>
+    <div class="row">
+      <button class="danger" type="button" id="confirmYes"></button>
+      <button type="button" id="confirmNo">إلغاء</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var STATUS = { active: 'فعّال', locked: 'مُقفل', expired: 'منتهٍ' };
+  var REASON = { unknown: 'كود خاطئ', locked: 'كود مقفل', expired: 'كود منتهٍ', devices: 'تجاوز عدد الأجهزة', throttled: 'محاولات كثيرة' };
+  var codes = [], roles = {};
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function when(iso) { if (!iso) return '—'; var d = new Date(iso); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
+  function whenH(iso) { return iso ? '<bdi dir="ltr">' + when(iso) + '</bdi>' : '—'; }
+  function say(msg) { $('live').textContent = ''; setTimeout(function () { $('live').textContent = msg; }, 30); }
+
+  async function api(method, url, body) {
+    var res;
+    try { res = await fetch('/api/admin' + url, { method: method, headers: body ? { 'content-type': 'application/json', 'x-app': '1' } : { 'x-app': '1' }, body: body ? JSON.stringify(body) : undefined }); }
+    catch (e) { throw new Error('تعذّر الاتصال بالخادم. تحقق من الإنترنت ثم حاول مرة أخرى.'); }
+    var json = null; try { json = await res.json(); } catch (e) {}
+    if (res.status === 401 && url !== '/login') { showGate(); throw new Error('انتهت جلسة المدير. سجّل الدخول مرة أخرى.'); }
+    if (!res.ok) throw new Error((json && json.message) || 'تعذّر تنفيذ الطلب.');
+    return json;
+  }
+  // يمنع الضغط المزدوج ويُظهر أن الطلب جارٍ
+  async function busy(btn, label, fn) {
+    if (btn.disabled) return;
+    var old = btn.textContent; btn.disabled = true; btn.textContent = label;
+    try { return await fn(); } finally { btn.disabled = false; btn.textContent = old; }
+  }
+
+  function showGate() { $('board').hidden = true; $('tools').hidden = true; $('gate').hidden = false; $('pw').focus(); }
+  function showBoard() { $('gate').hidden = true; $('board').hidden = false; $('tools').hidden = false; }
+
+  $('gateForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var err = $('gateErr'); err.hidden = true;
+    if (!$('pw').value) { err.textContent = 'اكتب كلمة المرور.'; err.hidden = false; $('pw').focus(); return; }
+    busy($('gateGo'), 'جارٍ التحقق…', async function () {
+      try { await api('POST', '/login', { password: $('pw').value }); $('pw').value = ''; showBoard(); await load(); }
+      catch (x) { err.textContent = x.message; err.hidden = false; $('pw').focus(); $('pw').select(); }
+    });
+  });
+  $('logout').addEventListener('click', function () { api('POST', '/logout').then(showGate, showGate); });
+
+  function expiryValue(sel, at) {
+    if (sel.value === 'keep') return undefined;
+    if (sel.value === '') return null;
+    if (sel.value === 'custom') { if (!at.value) throw new Error('اختر تاريخ الانتهاء.'); return new Date(at.value).toISOString(); }
+    return new Date(Date.now() + Number(sel.value) * 86400000).toISOString();
+  }
+  function wireExpiry(sel, wrap) { sel.addEventListener('change', function () { wrap.hidden = sel.value !== 'custom'; }); }
+  wireExpiry($('nExp'), $('nAtWrap')); wireExpiry($('eExp'), $('eAtWrap'));
+
+  function fillRoles() {
+    var html = Object.keys(roles).map(function (k) { return '<option value="' + esc(k) + '">' + esc(roles[k]) + '</option>'; }).join('');
+    if (!$('nRole').options.length) { $('nRole').innerHTML = html; $('nRole').value = 'viewer'; }
+    $('eRole').innerHTML = html;
+  }
+
+  function render() {
+    $('count').textContent = codes.length ? '(' + codes.length + ')' : '';
+    $('empty').hidden = codes.length > 0;
+    $('codes').innerHTML = codes.map(function (c) {
+      var online = c.devices.filter(function (d) { return d.online; }).length;
+      var name = esc(c.label);
+      return '<li class="code ' + c.status + '" data-id="' + esc(c.id) + '">' +
+        '<div class="row between"><h3>' + name + '</h3><span class="row">' +
+          (online ? '<span class="badge online">متصل الآن</span>' : '') +
+          '<span class="badge ' + c.status + '">' + STATUS[c.status] + '</span></span></div>' +
+        '<dl>' +
+          '<div><dt>الصلاحية</dt><dd>' + esc(c.roleLabel) + '</dd></div>' +
+          '<div><dt>ينتهي في</dt><dd class="mono">' + (c.expiresAt ? whenH(c.expiresAt) : 'بلا انتهاء') + '</dd></div>' +
+          '<div><dt>الأجهزة</dt><dd class="mono">' + c.devices.length + ' / ' + (c.maxDevices || '∞') + '</dd></div>' +
+          '<div><dt>آخر استخدام</dt><dd class="mono">' + (c.lastUsedAt ? whenH(c.lastUsedAt) : 'لم يُستخدم بعد') + '</dd></div>' +
+        '</dl>' +
+        (c.devices.length ? '<details><summary>الأجهزة التي استخدمت الكود (' + c.devices.length + ')</summary><ul class="devices">' + c.devices.map(function (d, i) {
+          return '<li><div class="row between"><span>جهاز ' + (i + 1) + (d.online ? ' · <span class="badge online">متصل الآن</span>' : '') + ' · آخر ظهور <span class="mono">' + whenH(d.lastSeen) + '</span> · <span class="mono">' + esc(d.ip || '') + '</span></span>' +
+            '<button class="small danger" type="button" data-act="kick" data-did="' + esc(d.id) + '" aria-label="إخراج الجهاز ' + (i + 1) + ' من كود ' + name + '">إخراج الجهاز</button></div>' +
+            '<div class="ua">' + esc(d.info || '') + '</div></li>';
+        }).join('') + '</ul></details>' : '') +
+        '<div class="row" style="margin-top:10px">' +
+          '<button class="small" type="button" data-act="lock" aria-label="' + (c.locked ? 'فتح' : 'إقفال') + ' كود ' + name + '">' + (c.locked ? 'فتح الكود' : 'إقفال الكود') + '</button>' +
+          '<button class="small" type="button" data-act="edit" aria-label="تعديل كود ' + name + '">تعديل</button>' +
+          '<button class="small" type="button" data-act="regen" aria-label="إعادة توليد كود ' + name + '">إعادة توليد</button>' +
+          '<button class="small danger" type="button" data-act="delete" aria-label="حذف كود ' + name + '">حذف</button>' +
+        '</div></li>';
+    }).join('');
+  }
+
+  async function load(quiet) {
+    $('listErr').hidden = true;
+    if (!quiet) { $('loading').hidden = false; $('codes').setAttribute('aria-busy', 'true'); }
+    try {
+      var r = await api('GET', '/codes');
+      codes = r.codes; roles = r.roles; fillRoles(); render();
+    } catch (e) {
+      if (!$('gate').hidden) return;
+      $('listErrMsg').textContent = 'تعذّر تحميل الأكواد: ' + e.message; $('listErr').hidden = false;
+    } finally { $('loading').hidden = true; $('codes').removeAttribute('aria-busy'); }
+  }
+  $('refresh').addEventListener('click', function () { busy($('refresh'), 'جارٍ التحديث…', function () { return load(true).then(function () { say('حُدّثت القائمة.'); }); }); });
+  $('retry').addEventListener('click', function () { load(); });
+
+  function showCode(code, label) {
+    $('shownCode').textContent = code; $('shownFor').textContent = label; $('copied').textContent = '';
+    $('shown').showModal(); $('copy').focus();
+  }
+  $('copy').addEventListener('click', async function () {
+    var code = $('shownCode').textContent;
+    try { await navigator.clipboard.writeText(code); $('copied').textContent = 'نُسخ الكود.'; }
+    catch (e) { var r = document.createRange(); r.selectNodeContents($('shownCode')); var s = getSelection(); s.removeAllRanges(); s.addRange(r); $('copied').textContent = 'تعذّر النسخ التلقائي. الكود محدد، انسخه يدوياً.'; }
+  });
+  $('shownClose').addEventListener('click', function () { $('shown').close(); });
+  $('shown').addEventListener('close', function () { $('shownCode').textContent = ''; $('listTitle').focus(); });
+
+  $('newForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var err = $('newErr'); err.hidden = true;
+    var label = $('nLabel').value.trim();
+    if (!label) { err.textContent = 'اكتب اسم صاحب الكود.'; err.hidden = false; $('nLabel').focus(); return; }
+    busy($('newGo'), 'جارٍ الإنشاء…', async function () {
+      try {
+        var r = await api('POST', '/codes', { label: label, role: $('nRole').value, expiresAt: expiryValue($('nExp'), $('nAt')), maxDevices: Number($('nDev').value || 0) });
+        $('nLabel').value = '';
+        await load(true);
+        say('أُنشئ كود «' + label + '».');
+        showCode(r.code, label);
+      } catch (x) { err.textContent = x.message; err.hidden = false; }
+    });
+  });
+
+  var editing = null;
+  function openEdit(c) {
+    editing = c;
+    $('eLabel').value = c.label; $('eRole').value = c.role; $('eDev').value = c.maxDevices;
+    $('eExp').value = 'keep'; $('eAtWrap').hidden = true; $('eAt').value = '';
+    $('eExpNow').textContent = 'الحالي: ' + (c.expiresAt ? 'ينتهي في ' + when(c.expiresAt) : 'بلا انتهاء');
+    $('editErr').hidden = true;
+    $('edit').showModal(); $('eLabel').focus();
+  }
+  $('editCancel').addEventListener('click', function () { $('edit').close(); });
+  $('editForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var err = $('editErr'); err.hidden = true;
+    busy($('editGo'), 'جارٍ الحفظ…', async function () {
+      try {
+        var body = { label: $('eLabel').value.trim(), role: $('eRole').value, maxDevices: Number($('eDev').value || 0) };
+        var exp = expiryValue($('eExp'), $('eAt')); if (exp !== undefined) body.expiresAt = exp;
+        await api('PATCH', '/codes/' + encodeURIComponent(editing.id), body);
+        $('edit').close(); await load(true); say('حُفظ تعديل كود «' + body.label + '».');
+      } catch (x) { err.textContent = x.message; err.hidden = false; }
+    });
+  });
+
+  var pending = null;
+  function ask(title, text, yes, run) {
+    pending = run;
+    $('confirmTitle').textContent = title; $('confirmText').textContent = text; $('confirmYes').textContent = yes; $('confirmErr').hidden = true;
+    $('confirm').showModal(); $('confirmNo').focus();
+  }
+  $('confirmNo').addEventListener('click', function () { $('confirm').close(); });
+  $('confirmYes').addEventListener('click', function () {
+    busy($('confirmYes'), 'جارٍ التنفيذ…', async function () {
+      try { await pending(); $('confirm').close(); }
+      catch (x) { $('confirmErr').textContent = x.message; $('confirmErr').hidden = false; }
+    });
+  });
+
+  $('codes').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-act]'); if (!btn) return;
+    var id = btn.closest('.code').dataset.id, c = codes.find(function (x) { return x.id === id; }); if (!c) return;
+    var url = '/codes/' + encodeURIComponent(id), act = btn.dataset.act;
+    if (act === 'edit') return openEdit(c);
+    if (act === 'lock') {
+      return busy(btn, '…', async function () {
+        try { await api('PATCH', url, { locked: !c.locked }); await load(true); say(c.locked ? 'فُتح كود «' + c.label + '».' : 'أُقفل كود «' + c.label + '» وأُخرج صاحبه.'); }
+        catch (x) { say(''); $('listErrMsg').textContent = x.message; $('listErr').hidden = false; }
+      });
+    }
+    if (act === 'regen') return ask('إعادة توليد كود «' + c.label + '»؟', 'سيتوقف الكود الحالي عن العمل ويخرج صاحبه من كل أجهزته، وتحصل على كود جديد ترسله له.', 'إعادة التوليد', async function () {
+      var r = await api('POST', url + '/regenerate'); await load(true); setTimeout(function () { showCode(r.code, c.label); }, 0);
+    });
+    if (act === 'delete') return ask('حذف كود «' + c.label + '»؟', 'يُحذف الكود نهائياً ويخرج صاحبه فوراً. ما سجّله من بيانات يبقى في المنصة. لا يمكن التراجع.', 'حذف نهائي', async function () {
+      await api('DELETE', url); await load(true); say('حُذف كود «' + c.label + '».'); setTimeout(function () { $('listTitle').focus(); }, 0);
+    });
+    if (act === 'kick') return ask('إخراج هذا الجهاز؟', 'يخرج الجهاز من المنصة ويتحرر مكانه في عدد الأجهزة المسموح لكود «' + c.label + '».', 'إخراج الجهاز', async function () {
+      await api('DELETE', url + '/devices/' + encodeURIComponent(btn.dataset.did)); await load(true); say('أُخرج الجهاز.');
+    });
+  });
+
+  $('logBox').addEventListener('toggle', async function () {
+    if (!$('logBox').open) return;
+    var body = $('logRows');
+    try {
+      var r = await api('GET', '/log');
+      body.innerHTML = r.log.length ? r.log.map(function (l) {
+        return '<tr><td class="mono">' + whenH(l.at) + '</td><td>' + esc(l.label || '—') + '</td><td>' + (l.ok ? '<span class="badge active">دخول</span>' : '<span class="badge locked">' + esc(REASON[l.reason] || 'مرفوض') + '</span>') + '</td><td class="mono">' + esc(l.ip || '') + '</td></tr>';
+      }).join('') : '<tr><td colspan="4" class="muted">لا توجد محاولات دخول بعد.</td></tr>';
+    } catch (x) { body.innerHTML = '<tr><td colspan="4">' + esc(x.message) + '</td></tr>'; }
+  });
+
+  // بدء: إن كانت جلسة المدير قائمة نعرض اللوحة مباشرة
+  api('GET', '/codes').then(function (r) { codes = r.codes; roles = r.roles; showBoard(); fillRoles(); render(); $('loading').hidden = true; }, function (e) {
+    if ($('gate').hidden) { showBoard(); $('loading').hidden = true; $('listErrMsg').textContent = 'تعذّر تحميل الأكواد: ' + e.message; $('listErr').hidden = false; }
+  });
+})();
+</script>
+</body>
+</html>

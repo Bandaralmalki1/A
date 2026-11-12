@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>الدخول — المنصة الجغرافية المرجعية</title>
+  <link rel="stylesheet" href="/ui.css">
+</head>
+<body>
+<main class="login">
+  <div class="panel stack">
+    <div>
+      <p class="muted">أمانة محافظة الطائف</p>
+      <h1>المنصة الجغرافية المرجعية</h1>
+    </div>
+    <p id="why" class="notice" role="status" hidden></p>
+    <form id="form" class="stack" novalidate>
+      <div>
+        <label for="code">كود الدخول</label>
+        <input id="code" name="code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XX" aria-describedby="hint err" required autofocus>
+        <p id="hint" class="hint">اكتب الكود الذي وصلك من مدير المنصة. لا فرق بين الأحرف الكبيرة والصغيرة.</p>
+      </div>
+      <p id="err" class="alert" role="alert" hidden></p>
+      <button id="go" class="primary" type="submit">دخول</button>
+    </form>
+  </div>
+</main>
+<script>
+(function () {
+  var WHY = {
+    locked: 'أُقفل كود الدخول الخاص بك. تواصل مع مدير المنصة.',
+    expired: 'انتهت مدة كود الدخول الخاص بك. تواصل مع مدير المنصة لتجديده.',
+  };
+  var form = document.getElementById('form'), input = document.getElementById('code'), err = document.getElementById('err'), go = document.getElementById('go'), why = document.getElementById('why');
+  var reason = new URLSearchParams(location.search).get('why');
+  if (WHY[reason]) { why.textContent = WHY[reason]; why.hidden = false; }
+  function show(msg) { err.textContent = msg; err.hidden = false; input.setAttribute('aria-invalid', 'true'); input.focus(); input.select(); }
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    if (go.disabled) return;
+    var code = input.value.trim();
+    if (!code) return show('اكتب كود الدخول أولاً.');
+    err.hidden = true; input.removeAttribute('aria-invalid');
+    go.disabled = true; go.textContent = 'جارٍ التحقق…';
+    try {
+      var res = await fetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-app': '1' }, body: JSON.stringify({ code: code }) });
+      var json = null; try { json = await res.json(); } catch (x) {}
+      if (res.ok) { location.replace('/'); return; }
+      show((json && json.message) || 'تعذّر الدخول. حاول مرة أخرى.');
+    } catch (x) {
+      show('تعذّر الاتصال بالخادم. تحقق من الإنترنت ثم حاول مرة أخرى.');
+    }
+    go.disabled = false; go.textContent = 'دخول';
+  });
+})();
+</script>
+</body>
+</html>

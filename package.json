@@ -1,0 +1,16 @@
+{
+  "name": "taif-geo-platform",
+  "version": "2.3.0",
+  "private": true,
+  "description": "المنصة الجغرافية المرجعية — نسخة مشتركة بقاعدة بيانات وأكواد دخول",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test server/test/*.test.js",
+    "build:app": "node scripts/build-app.mjs"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
