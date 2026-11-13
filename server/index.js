@@ -69,6 +69,11 @@ export function createApp({ dataDir, adminPassword, trustProxy = 1 }) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data');
   let adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword && process.env.NODE_ENV === 'production') {
+    // في النشر لا نولّد كلمة مؤقتة: لوحة المدير تتحكم في كل الأكواد
+    console.error('لم يُضبط المتغير ADMIN_PASSWORD. أضفه في إعدادات الاستضافة (Variables) بكلمة مرور قوية ثم أعد النشر.');
+    process.exit(1);
+  }
   if (!adminPassword) {
     adminPassword = crypto.randomBytes(9).toString('base64url');
     console.log(`\n[تنبيه] لم يُضبط ADMIN_PASSWORD. كلمة مرور المدير لهذه الجلسة فقط: ${adminPassword}\n`);
