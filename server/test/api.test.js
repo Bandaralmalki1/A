@@ -206,6 +206,15 @@ test('التغييرات تُبث حياً، والإقفال يقطع البث'
   ac.abort();
 });
 
+test('المدير يحذف سجلاً أُدخل بالخطأ، والمستخدم لا يستطيع', async () => {
+  const u = await loggedIn({ role: 'pmo' });
+  await u('PUT', '/api/db/updates/wrong1', { data: { pid: 'x' } });
+  assert.equal((await u('DELETE', '/api/admin/docs/updates/wrong1')).status, 401);
+  assert.equal((await admin('DELETE', '/api/admin/docs/updates/wrong1')).status, 200);
+  assert.equal((await admin('DELETE', '/api/admin/docs/updates/wrong1')).status, 404);
+  assert.ok(!(await u('GET', '/api/db/updates')).json.docs.some(d => d.id === 'wrong1'));
+});
+
 test('حد محاولات الدخول الفاشلة', async () => {
   const anon = client();
   let last;

@@ -23,6 +23,7 @@ export function adminRoutes({ db, hub, adminPassword, throttle }) {
     dropDeviceSessions: db.prepare('DELETE FROM sessions WHERE code_id = ? AND device_id = ?'),
     log: db.prepare('SELECT l.at, l.ip, l.ok, l.reason, c.label FROM login_log l LEFT JOIN codes c ON c.id = l.code_id ORDER BY l.at DESC LIMIT 100'),
     docs: db.prepare('SELECT collection, id, data, updated_at, updated_by FROM docs'),
+    delDoc: db.prepare('DELETE FROM docs WHERE collection = ? AND id = ?'),
   };
 
   function requireAdmin(req, res, next) {
@@ -129,6 +130,14 @@ export function adminRoutes({ db, hub, adminPassword, throttle }) {
   r.get('/backup', (req, res) => {
     res.set('Content-Disposition', `attachment; filename="taif-platform-backup-${nowIso().slice(0, 10)}.json"`);
     res.json({ at: nowIso(), docs: q.docs.all().map(d => ({ ...d, data: JSON.parse(d.data) })) });
+  });
+
+  // حذف سجل واحد أُدخل بالخطأ (المنصة نفسها لا تحذف)
+  r.delete('/docs/:c/:id', (req, res) => {
+    const n = q.delDoc.run(req.params.c, req.params.id).changes;
+    if (!n) return res.status(404).json({ message: 'السجل غير موجود.' });
+    hub.change(req.params.c);
+    res.json({ ok: true });
   });
 
   return r;
