@@ -66,3 +66,9 @@ th { color: var(--muted); font-weight: 500; }
 .login input { font-size: 20px; text-align: center; letter-spacing: 2px; direction: ltr; text-transform: uppercase; }
 [hidden] { display: none !important; }
 @media (prefers-reduced-motion: no-preference) { button, .btn { transition: border-color .15s, filter .15s; } }
+
+fieldset.tabs { border: 1px solid var(--line); padding: 12px 14px; margin: 0; min-width: 0; }
+fieldset.tabs legend { font-size: 13px; color: var(--muted); padding: 0 6px; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px 14px; }
+.check { display: flex; align-items: center; gap: 8px; min-height: 36px; margin: 0; font-size: 14px; color: var(--text); cursor: pointer; }
+.check input { width: 18px; height: 18px; min-height: 0; padding: 0; flex: none; accent-color: var(--gold); }

@@ -69,6 +69,11 @@
             <p class="hint" id="nDevHint">0 = بلا قيد</p>
           </div>
         </div>
+        <fieldset class="tabs" id="nTabsBox" hidden>
+          <legend>اللوحات التي يراها هذا المشاهد</legend>
+          <div class="checks" id="nTabs"></div>
+          <p class="hint">أزل العلامة عن اللوحات التي لا تريد أن يراها. اللوحات المخفية لا تظهر في شريط التنقل ولا يمكن فتحها.</p>
+        </fieldset>
         <p id="newErr" class="alert" role="alert" hidden></p>
         <div><button class="primary" type="submit" id="newGo">إنشاء الكود</button></div>
       </form>
@@ -87,6 +92,30 @@
       <p id="loading" class="muted" role="status">جارٍ تحميل الأكواد…</p>
       <p id="empty" class="empty" hidden>لا توجد أكواد بعد. أنشئ أول كود من النموذج أعلاه ثم أرسله لصاحبه.</p>
       <ul id="codes" class="codes"></ul>
+    </section>
+
+    <section class="panel stack" aria-labelledby="docsTitle">
+      <h2 id="docsTitle" tabindex="-1">سجلات المنصة</h2>
+      <p class="muted">لحذف سجل أُدخل بالخطأ: تقرير رُفع خطأً، توجيه، تحديث، أو صورة. الحذف نهائي ويظهر أثره عند كل المستخدمين فوراً.</p>
+      <div class="row" style="align-items:flex-end">
+        <div class="field">
+          <label for="docsKind">نوع السجل</label>
+          <select id="docsKind">
+            <option value="reports">التقارير المرفوعة</option>
+            <option value="updates">التحديثات السريعة للمشاريع</option>
+            <option value="directives">توجيهات القيادة</option>
+            <option value="prisks">المخاطر</option>
+            <option value="media">الصور والملفات</option>
+            <option value="scopes">نطاقات المشاريع</option>
+            <option value="execReports">أرشيف التقارير التنفيذية</option>
+            <option value="audit">سجل العمليات</option>
+          </select>
+        </div>
+        <button type="button" id="docsShow">عرض السجلات</button>
+      </div>
+      <p id="docsErr" class="alert" role="alert" hidden></p>
+      <p id="docsState" class="muted" role="status"></p>
+      <ul id="docs" class="codes"></ul>
     </section>
 
     <details id="logBox">
@@ -134,6 +163,10 @@
     </div>
     <div id="eAtWrap" hidden><label for="eAt">ينتهي في</label><input id="eAt" type="datetime-local"></div>
     <div><label for="eDev">عدد الأجهزة</label><input id="eDev" type="number" inputmode="numeric" min="0" max="50" aria-describedby="eDevHint"><p class="hint" id="eDevHint">0 = بلا قيد</p></div>
+    <fieldset class="tabs" id="eTabsBox" hidden>
+      <legend>اللوحات التي يراها هذا المشاهد</legend>
+      <div class="checks" id="eTabs"></div>
+    </fieldset>
     <p id="editErr" class="alert" role="alert" hidden></p>
     <div class="row">
       <button class="primary" type="submit" id="editGo">حفظ</button>
@@ -160,7 +193,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var STATUS = { active: 'فعّال', locked: 'مُقفل', expired: 'منتهٍ' };
   var REASON = { unknown: 'كود خاطئ', locked: 'كود مقفل', expired: 'كود منتهٍ', devices: 'تجاوز عدد الأجهزة', throttled: 'محاولات كثيرة' };
-  var codes = [], roles = {};
+  var codes = [], roles = {}, tabs = {};
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function when(iso) { if (!iso) return '—'; var d = new Date(iso); return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
@@ -210,7 +243,24 @@
     var html = Object.keys(roles).map(function (k) { return '<option value="' + esc(k) + '">' + esc(roles[k]) + '</option>'; }).join('');
     if (!$('nRole').options.length) { $('nRole').innerHTML = html; $('nRole').value = 'viewer'; }
     $('eRole').innerHTML = html;
+    fillTabs('n'); fillTabs('e'); syncTabs('n');
   }
+  // مربعات اللوحات: تظهر للمشاهد فقط، وكلها معلَّمة يعني «كل اللوحات»
+  function fillTabs(p) {
+    var box = $(p + 'Tabs'); if (box.children.length) return;
+    box.innerHTML = Object.keys(tabs).map(function (k) { return '<label class="check"><input type="checkbox" value="' + esc(k) + '" checked> ' + esc(tabs[k]) + '</label>'; }).join('');
+  }
+  function syncTabs(p) { $(p + 'TabsBox').hidden = $(p + 'Role').value !== 'viewer'; }
+  function setTabs(p, list) { $(p + 'Tabs').querySelectorAll('input').forEach(function (i) { i.checked = !list || list.indexOf(i.value) >= 0; }); }
+  function readTabs(p) {
+    if ($(p + 'Role').value !== 'viewer') return null;
+    var all = $(p + 'Tabs').querySelectorAll('input'), on = [];
+    all.forEach(function (i) { if (i.checked) on.push(i.value); });
+    if (!on.length) throw new Error('اختر لوحة واحدة على الأقل لهذا المشاهد.');
+    return on.length === all.length ? null : on;
+  }
+  $('nRole').addEventListener('change', function () { syncTabs('n'); });
+  $('eRole').addEventListener('change', function () { syncTabs('e'); });
 
   function render() {
     $('count').textContent = codes.length ? '(' + codes.length + ')' : '';
@@ -225,6 +275,7 @@
         '<dl>' +
           '<div><dt>الصلاحية</dt><dd>' + esc(c.roleLabel) + '</dd></div>' +
           '<div><dt>ينتهي في</dt><dd class="mono">' + (c.expiresAt ? whenH(c.expiresAt) : 'بلا انتهاء') + '</dd></div>' +
+          (c.role === 'viewer' ? '<div><dt>اللوحات</dt><dd>' + (c.tabs ? c.tabs.map(function (k) { return esc(tabs[k]); }).join('، ') : 'كل اللوحات') + '</dd></div>' : '') +
           '<div><dt>الأجهزة</dt><dd class="mono">' + c.devices.length + ' / ' + (c.maxDevices || '∞') + '</dd></div>' +
           '<div><dt>آخر استخدام</dt><dd class="mono">' + (c.lastUsedAt ? whenH(c.lastUsedAt) : 'لم يُستخدم بعد') + '</dd></div>' +
         '</dl>' +
@@ -247,7 +298,7 @@
     if (!quiet) { $('loading').hidden = false; $('codes').setAttribute('aria-busy', 'true'); }
     try {
       var r = await api('GET', '/codes');
-      codes = r.codes; roles = r.roles; fillRoles(); render();
+      codes = r.codes; roles = r.roles; tabs = r.tabs; fillRoles(); render();
     } catch (e) {
       if (!$('gate').hidden) return;
       $('listErrMsg').textContent = 'تعذّر تحميل الأكواد: ' + e.message; $('listErr').hidden = false;
@@ -275,8 +326,8 @@
     if (!label) { err.textContent = 'اكتب اسم صاحب الكود.'; err.hidden = false; $('nLabel').focus(); return; }
     busy($('newGo'), 'جارٍ الإنشاء…', async function () {
       try {
-        var r = await api('POST', '/codes', { label: label, role: $('nRole').value, expiresAt: expiryValue($('nExp'), $('nAt')), maxDevices: Number($('nDev').value || 0) });
-        $('nLabel').value = '';
+        var r = await api('POST', '/codes', { label: label, role: $('nRole').value, expiresAt: expiryValue($('nExp'), $('nAt')), maxDevices: Number($('nDev').value || 0), tabs: readTabs('n') });
+        $('nLabel').value = ''; setTabs('n', null);
         await load(true);
         say('أُنشئ كود «' + label + '».');
         showCode(r.code, label);
@@ -291,6 +342,7 @@
     $('eExp').value = 'keep'; $('eAtWrap').hidden = true; $('eAt').value = '';
     $('eExpNow').textContent = 'الحالي: ' + (c.expiresAt ? 'ينتهي في ' + when(c.expiresAt) : 'بلا انتهاء');
     $('editErr').hidden = true;
+    setTabs('e', c.tabs); syncTabs('e');
     $('edit').showModal(); $('eLabel').focus();
   }
   $('editCancel').addEventListener('click', function () { $('edit').close(); });
@@ -299,7 +351,7 @@
     var err = $('editErr'); err.hidden = true;
     busy($('editGo'), 'جارٍ الحفظ…', async function () {
       try {
-        var body = { label: $('eLabel').value.trim(), role: $('eRole').value, maxDevices: Number($('eDev').value || 0) };
+        var body = { label: $('eLabel').value.trim(), role: $('eRole').value, maxDevices: Number($('eDev').value || 0), tabs: readTabs('e') };
         var exp = expiryValue($('eExp'), $('eAt')); if (exp !== undefined) body.expiresAt = exp;
         await api('PATCH', '/codes/' + encodeURIComponent(editing.id), body);
         $('edit').close(); await load(true); say('حُفظ تعديل كود «' + body.label + '».');
@@ -343,6 +395,40 @@
     });
   });
 
+  // ── سجلات المنصة ──
+  var docs = [], docsKind = '';
+  function renderDocs() {
+    $('docsState').textContent = docs.length ? docs.length + ' سجلاً، الأحدث أولاً.' : 'لا توجد سجلات من هذا النوع.';
+    $('docs').innerHTML = docs.map(function (d) {
+      var name = esc(d.title || d.id);
+      return '<li class="code" data-doc="' + esc(d.id) + '"><div class="row between"><h3>' + name + '</h3>' +
+        '<button class="small danger" type="button" data-act="deldoc" aria-label="حذف السجل ' + name + '">حذف</button></div>' +
+        '<dl><div><dt>التاريخ</dt><dd class="mono">' + whenH(d.at) + '</dd></div>' +
+        (d.by ? '<div><dt>أدخله</dt><dd>' + esc(d.by) + '</dd></div>' : '') +
+        (d.pid ? '<div><dt>رقم المشروع</dt><dd class="mono">' + esc(d.pid) + '</dd></div>' : '') +
+        (d.rows != null ? '<div><dt>عدد المشاريع</dt><dd class="mono">' + d.rows + '</dd></div>' : '') +
+        '<div><dt>المعرّف</dt><dd class="mono">' + esc(d.id) + '</dd></div></dl></li>';
+    }).join('');
+  }
+  async function loadDocs() {
+    var kind = $('docsKind').value;
+    $('docsErr').hidden = true; $('docsState').textContent = 'جارٍ التحميل…'; $('docs').innerHTML = '';
+    try { var r = await api('GET', '/docs/' + kind); docs = r.docs; docsKind = kind; renderDocs(); }
+    catch (x) { $('docsState').textContent = ''; $('docsErr').textContent = 'تعذّر تحميل السجلات: ' + x.message; $('docsErr').hidden = false; }
+  }
+  $('docsShow').addEventListener('click', function () { busy($('docsShow'), 'جارٍ التحميل…', loadDocs); });
+  $('docsKind').addEventListener('change', function () { docs = []; $('docs').innerHTML = ''; $('docsState').textContent = ''; $('docsErr').hidden = true; });
+  $('docs').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-act="deldoc"]'); if (!btn) return;
+    var id = btn.closest('li').dataset.doc, d = docs.find(function (x) { return x.id === id; }); if (!d) return;
+    var kindName = $('docsKind').selectedOptions[0].textContent;
+    ask('حذف هذا السجل؟', '«' + (d.title || d.id) + '» من ' + kindName + '. يُحذف نهائياً ويختفي عند كل المستخدمين فوراً. لا يمكن التراجع؛ نزّل نسخة احتياطية أولاً إن لم تكن متأكداً.', 'حذف نهائي', async function () {
+      await api('DELETE', '/docs/' + docsKind + '/' + encodeURIComponent(id));
+      docs = docs.filter(function (x) { return x.id !== id; }); renderDocs();
+      say('حُذف السجل «' + (d.title || d.id) + '».'); setTimeout(function () { $('docsTitle').focus(); }, 0);
+    });
+  });
+
   $('logBox').addEventListener('toggle', async function () {
     if (!$('logBox').open) return;
     var body = $('logRows');
@@ -355,7 +441,7 @@
   });
 
   // بدء: إن كانت جلسة المدير قائمة نعرض اللوحة مباشرة
-  api('GET', '/codes').then(function (r) { codes = r.codes; roles = r.roles; showBoard(); fillRoles(); render(); $('loading').hidden = true; }, function (e) {
+  api('GET', '/codes').then(function (r) { codes = r.codes; roles = r.roles; tabs = r.tabs; showBoard(); fillRoles(); render(); $('loading').hidden = true; }, function (e) {
     if ($('gate').hidden) { showBoard(); $('loading').hidden = true; $('listErrMsg').textContent = 'تعذّر تحميل الأكواد: ' + e.message; $('listErr').hidden = false; }
   });
 })();

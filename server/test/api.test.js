@@ -215,6 +215,47 @@ test('المدير يحذف سجلاً أُدخل بالخطأ، والمستخ�
   assert.ok(!(await u('GET', '/api/db/updates')).json.docs.some(d => d.id === 'wrong1'));
 });
 
+test('المالك يملك كل الصلاحيات ويظهر للمنصة بواجهة مدير المشاريع', async () => {
+  const o = await loggedIn({ role: 'owner' });
+  const me = (await o('GET', '/api/me')).json;
+  assert.deepEqual([me.role, me.roleLabel, me.owner], ['pmo', 'مالك المنصة', true]);
+  assert.deepEqual(me.perms, { dataWrite: true, editor: true, directives: true, upload: true });
+  for (const c of ['reports', 'execReports', 'directives', 'updates', 'prisks', 'media', 'scopes'])
+    assert.equal((await o('PUT', `/api/db/${c}/own1`, { data: { text: 't', rows: [{ id: '1' }] } })).status, 200, c);
+  assert.equal((await o('PATCH', '/api/db/directives/own1', { data: { status: 'done' } })).status, 200);
+  assert.equal((await o('PUT', '/api/db/audit/own-a', { data: { act: 'x' } })).status, 200);
+  assert.equal((await o('PATCH', '/api/db/audit/own-a', { data: { act: 'y' } })).status, 403, 'سجل العمليات لا يُعدَّل حتى للمالك');
+});
+
+test('قصر المشاهد على لوحات محددة', async () => {
+  const v = await loggedIn({ role: 'viewer', tabs: ['ops', 'ceo'] });
+  assert.deepEqual((await v('GET', '/api/me')).json.tabs, ['ceo', 'ops'], 'بترتيب المنصة');
+  const all = await loggedIn({ role: 'viewer' });
+  assert.equal((await all('GET', '/api/me')).json.tabs, null);
+  const p = await loggedIn({ role: 'pmo', tabs: ['ceo'] });
+  assert.equal((await p('GET', '/api/me')).json.tabs, null, 'القيد للمشاهد فقط');
+  assert.equal((await admin('POST', '/api/admin/codes', { label: 'x', role: 'viewer', tabs: [] })).status, 400);
+  assert.equal((await admin('POST', '/api/admin/codes', { label: 'x', role: 'viewer', tabs: ['nope'] })).status, 400);
+  await admin('PATCH', '/api/admin/codes/' + v.id, { tabs: ['live'] });
+  assert.deepEqual((await v('GET', '/api/me')).json.tabs, ['live']);
+  await admin('PATCH', '/api/admin/codes/' + v.id, { role: 'entry' });
+  assert.equal((await v('GET', '/api/me')).json.tabs, null, 'تغيير الدور يلغي القيد');
+  const item = (await admin('GET', '/api/admin/codes')).json;
+  assert.equal(item.tabs.ops, 'غرفة العمليات');
+});
+
+test('المدير يعرض السجلات ويحذف صورة مع ملفها', async () => {
+  const u = await loggedIn({ role: 'entry', label: 'سارة' });
+  const up = await u('POST', '/api/assets?name=p.png', Buffer.from('89504e47', 'hex'), 'image/png');
+  await u('PUT', '/api/db/media/m-del', { data: { pid: '9', name: 'صورة الموقع', aid: up.json.id, url: up.json.url, at: '2026-11-01T00:00:00Z' } });
+  const list = (await admin('GET', '/api/admin/docs/media')).json.docs.find(d => d.id === 'm-del');
+  assert.deepEqual([list.title, list.by, list.pid], ['صورة الموقع', 'سارة', '9']);
+  assert.equal((await admin('GET', '/api/admin/docs/codes')).status, 404);
+  assert.equal((await u('GET', '/api/admin/docs/media')).status, 401);
+  assert.equal((await admin('DELETE', '/api/admin/docs/media/m-del')).status, 200);
+  assert.equal((await u('GET', up.json.url)).status, 404, 'الملف حُذف مع سجله');
+});
+
 test('حد محاولات الدخول الفاشلة', async () => {
   const anon = client();
   let last;

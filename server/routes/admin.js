@@ -1,10 +1,12 @@
 import express from 'express';
-import { ROLES } from '../perms.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { COLLECTIONS, ROLES, TABS, allowedTabs } from '../perms.js';
 import { codeProblem, hashCode, newCode, nowIso, parseCookies, safeEqual, setCookie, sha, shortId, token } from '../auth.js';
 
 const ADMIN_HOURS = 12;
 
-export function adminRoutes({ db, hub, adminPassword, throttle }) {
+export function adminRoutes({ db, hub, dataDir, adminPassword, throttle }) {
   const r = express.Router();
   const q = {
     adminSession: db.prepare('SELECT created_at FROM admin_sessions WHERE token_hash = ?'),
@@ -13,8 +15,8 @@ export function adminRoutes({ db, hub, adminPassword, throttle }) {
     codes: db.prepare('SELECT * FROM codes ORDER BY created_at DESC'),
     code: db.prepare('SELECT * FROM codes WHERE id = ?'),
     devices: db.prepare('SELECT * FROM devices ORDER BY last_seen DESC'),
-    insert: db.prepare('INSERT INTO codes (id, label, code_hash, role, expires_at, locked, max_devices, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)'),
-    update: db.prepare('UPDATE codes SET label = ?, role = ?, expires_at = ?, locked = ?, max_devices = ? WHERE id = ?'),
+    insert: db.prepare('INSERT INTO codes (id, label, code_hash, role, expires_at, locked, max_devices, created_at, tabs) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)'),
+    update: db.prepare('UPDATE codes SET label = ?, role = ?, expires_at = ?, locked = ?, max_devices = ?, tabs = ? WHERE id = ?'),
     rehash: db.prepare('UPDATE codes SET code_hash = ? WHERE id = ?'),
     del: db.prepare('DELETE FROM codes WHERE id = ?'),
     dropSessions: db.prepare('DELETE FROM sessions WHERE code_id = ?'),
@@ -23,6 +25,10 @@ export function adminRoutes({ db, hub, adminPassword, throttle }) {
     dropDeviceSessions: db.prepare('DELETE FROM sessions WHERE code_id = ? AND device_id = ?'),
     log: db.prepare('SELECT l.at, l.ip, l.ok, l.reason, c.label FROM login_log l LEFT JOIN codes c ON c.id = l.code_id ORDER BY l.at DESC LIMIT 100'),
     docs: db.prepare('SELECT collection, id, data, updated_at, updated_by FROM docs'),
+    listDocs: db.prepare('SELECT id, data, updated_at, updated_by FROM docs WHERE collection = ? ORDER BY updated_at DESC'),
+    getDoc: db.prepare('SELECT data FROM docs WHERE collection = ? AND id = ?'),
+    labels: db.prepare('SELECT id, label FROM codes'),
+    delAsset: db.prepare('DELETE FROM assets WHERE id = ?'),
     delDoc: db.prepare('DELETE FROM docs WHERE collection = ? AND id = ?'),
   };
 
@@ -56,14 +62,14 @@ export function adminRoutes({ db, hub, adminPassword, throttle }) {
 
   const view = (c, devices, online) => ({
     id: c.id, label: c.label, role: c.role, roleLabel: ROLES[c.role], expiresAt: c.expires_at, locked: !!c.locked,
-    maxDevices: c.max_devices, createdAt: c.created_at, lastUsedAt: c.last_used_at,
+    tabs: allowedTabs(c), maxDevices: c.max_devices, createdAt: c.created_at, lastUsedAt: c.last_used_at,
     status: codeProblem(c) || 'active',
     devices: devices.filter(d => d.code_id === c.id).map(d => ({ id: d.device_id, info: d.info, ip: d.ip, firstSeen: d.first_seen, lastSeen: d.last_seen, online: online.has(c.id + '|' + d.device_id) })),
   });
   r.get('/codes', (req, res) => {
     const devices = q.devices.all(), online = new Set();
     hub.each(c => online.add(c.codeId + '|' + c.deviceId));
-    res.json({ roles: ROLES, codes: q.codes.all().map(c => view(c, devices, online)) });
+    res.json({ roles: ROLES, tabs: TABS, codes: q.codes.all().map(c => view(c, devices, online)) });
   });
 
   // يتحقق من الحقول المرسلة فقط ويعيد خطأً عربياً واضحاً
@@ -77,14 +83,24 @@ export function adminRoutes({ db, hub, adminPassword, throttle }) {
     }
     if ('maxDevices' in body) { const n = Number(body.maxDevices); if (!Number.isInteger(n) || n < 0 || n > 50) return { error: 'عدد الأجهزة يجب أن يكون بين 0 و50 (0 = بلا قيد).' }; out.max_devices = n; }
     if ('locked' in body) out.locked = body.locked ? 1 : 0;
+    if ('tabs' in body) {
+      if (body.tabs == null) out.tabs = null;
+      else {
+        if (!Array.isArray(body.tabs) || body.tabs.some(k => !TABS[k])) return { error: 'قائمة اللوحات غير صالحة.' };
+        if (!body.tabs.length) return { error: 'اختر لوحة واحدة على الأقل.' };
+        out.tabs = JSON.stringify(Object.keys(TABS).filter(k => body.tabs.includes(k)));
+      }
+    }
+    // قصر اللوحات للمشاهد فقط
+    if (out.role !== 'viewer') out.tabs = null;
     return { value: out };
   }
 
   r.post('/codes', (req, res) => {
-    const c = clean({ label: '', role: '', expiresAt: null, maxDevices: 1, ...req.body }, {});
+    const c = clean({ label: '', role: '', expiresAt: null, maxDevices: 1, tabs: null, ...req.body }, {});
     if (c.error) return res.status(400).json({ message: c.error });
     const id = shortId(), plain = newCode(), v = c.value;
-    q.insert.run(id, v.label, hashCode(plain), v.role, v.expires_at, v.max_devices, nowIso());
+    q.insert.run(id, v.label, hashCode(plain), v.role, v.expires_at, v.max_devices, nowIso(), v.tabs);
     res.json({ code: plain, item: view(q.code.get(id), [], new Set()) });
   });
 
@@ -94,10 +110,10 @@ export function adminRoutes({ db, hub, adminPassword, throttle }) {
     const c = clean(req.body || {}, old);
     if (c.error) return res.status(400).json({ message: c.error });
     const v = c.value;
-    q.update.run(v.label, v.role, v.expires_at, v.locked, v.max_devices, old.id);
+    q.update.run(v.label, v.role, v.expires_at, v.locked, v.max_devices, v.tabs ?? null, old.id);
     const problem = codeProblem(v);
     if (problem) hub.kick(old.id, problem);
-    else if (v.role !== old.role) hub.notify(old.id, 'reload');
+    else if (v.role !== old.role || (v.tabs ?? null) !== (old.tabs ?? null)) hub.notify(old.id, 'reload');
     res.json({ ok: true });
   });
 
@@ -133,9 +149,23 @@ export function adminRoutes({ db, hub, adminPassword, throttle }) {
   });
 
   // حذف سجل واحد أُدخل بالخطأ (المنصة نفسها لا تحذف)
+  r.get('/docs/:c', (req, res) => {
+    if (!COLLECTIONS.includes(req.params.c)) return res.status(404).json({ message: 'مجموعة غير معروفة.' });
+    const names = Object.fromEntries(q.labels.all().map(c => [c.id, c.label]));
+    res.json({ docs: q.listDocs.all(req.params.c).map(d => {
+      const x = JSON.parse(d.data);
+      const title = [x.label, x.text, x.txt, x.name, x.note, x.title, x.file].find(v => typeof v === 'string' && v.trim());
+      return { id: d.id, title: String(title || '').slice(0, 200), pid: x.pid || '', at: x.at || d.updated_at, by: names[x.by || d.updated_by] || '', rows: Array.isArray(x.rows) ? x.rows.length : null };
+    }) });
+  });
+
   r.delete('/docs/:c/:id', (req, res) => {
-    const n = q.delDoc.run(req.params.c, req.params.id).changes;
-    if (!n) return res.status(404).json({ message: 'السجل غير موجود.' });
+    const old = q.getDoc.get(req.params.c, req.params.id);
+    if (!old) return res.status(404).json({ message: 'السجل غير موجود.' });
+    q.delDoc.run(req.params.c, req.params.id);
+    // سجل صورة أو ملف: يُحذف الملف المرفوع معه
+    const aid = req.params.c === 'media' && JSON.parse(old.data).aid;
+    if (typeof aid === 'string' && /^[\w-]{8,40}$/.test(aid)) { q.delAsset.run(aid); fs.rmSync(path.join(dataDir, 'assets', aid), { force: true }); }
     hub.change(req.params.c);
     res.json({ ok: true });
   });

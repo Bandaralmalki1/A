@@ -41,5 +41,7 @@ export function openDb(dataDir) {
       at TEXT NOT NULL, ip TEXT, ok INTEGER NOT NULL, code_id TEXT, reason TEXT
     );
   `);
+  // ترقية قواعد أُنشئت قبل إضافة قصر اللوحات
+  if (!db.prepare('PRAGMA table_info(codes)').all().some(c => c.name === 'tabs')) db.exec('ALTER TABLE codes ADD COLUMN tabs TEXT');
   return db;
 }

@@ -9,7 +9,7 @@ import { makeHub } from './events.js';
 import { codeProblem, makeThrottle } from './auth.js';
 import { apiRoutes } from './routes/api.js';
 import { adminRoutes } from './routes/admin.js';
-import { ROLES, uiPerms } from './perms.js';
+import { meOf } from './perms.js';
 
 const WEB = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'web');
 
@@ -26,7 +26,7 @@ export function createApp({ dataDir, adminPassword, trustProxy = 1 }) {
   });
 
   const api = apiRoutes({ db, hub, dataDir, throttle });
-  app.use('/api/admin', adminRoutes({ db, hub, adminPassword, throttle }));
+  app.use('/api/admin', adminRoutes({ db, hub, dataDir, adminPassword, throttle }));
   app.use('/api', api.router);
 
   // ملف المنصة كبير (نحو 1.8 ميغابايت)، فيُضغط مرة واحدة عند التشغيل
@@ -49,7 +49,7 @@ export function createApp({ dataDir, adminPassword, trustProxy = 1 }) {
   // بيانات المستخدم الحالي، تُحمَّل قبل كود المنصة
   app.get('/me.js', (req, res) => {
     const c = api.readSession(req).code;
-    const me = c ? { id: c.id, name: c.label, role: c.role, roleLabel: ROLES[c.role], perms: uiPerms(c.role), expiresAt: c.expires_at } : null;
+    const me = c ? meOf(c) : null;
     res.set({ 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
     res.send('window.__ME = ' + JSON.stringify(me).replace(/</g, '\\u003c') + ';');
   });

@@ -39,10 +39,26 @@ function patch(name, from, to) {
 patch('الدور الابتدائي من كود الدخول', "role: 'pmo',", "role: (window.__ME && window.__ME.role) || 'viewer',");
 patch('قفل قائمة الدور وإضافة الخروج',
   "roleOpts: ROLES.map(r => ({ k: r.k, label: r.label })), role: st.role, onRole: e => this.setState({ role: e.target.value, dataOpen: false }),",
-  "roleOpts: [{ k: st.role, label: ROLES.find(r => r.k === st.role).label + (window.__ME ? ' — ' + window.__ME.name : '') }, { k: '__logout', label: 'تسجيل الخروج' }], role: st.role, onRole: e => { if (e.target.value === '__logout' && window.__logout) window.__logout(); },");
+  "roleOpts: [{ k: st.role, label: window.__ME ? window.__ME.roleLabel + ' — ' + window.__ME.name : ROLES.find(r => r.k === st.role).label }, { k: '__logout', label: 'تسجيل الخروج' }], role: st.role, onRole: e => { if (e.target.value === '__logout' && window.__logout) window.__logout(); },");
 patch('التوجيهات حسب صلاحية الكود',
   "canDir() { return this.state.dbState === 'live' ? !this.dirRO :",
   "canDir() { if (window.__ME && !window.__ME.perms.directives) return false; return this.state.dbState === 'live' ? !this.dirRO :");
+
+// ── قصر المشاهد على لوحات محددة: window.__TABS قائمة اللوحات المسموحة أو null للكل ──
+const ALLOWED = "(k => !window.__TABS || window.__TABS.includes(k))";
+patch('اللوحة الابتدائية', "state = { tab: 'ceo', scope: null,", "state = { tab: (window.__TABS ? window.__TABS[0] : 'ceo'), scope: null,");
+patch('شريط اللوحات',
+  "['plan', 'المخطط التنفيذي']].map(([k, l]) => ({ label: l, go: () => this.setTab(k),",
+  "['plan', 'المخطط التنفيذي']].filter(([k]) => " + ALLOWED + "(k)).map(([k, l]) => ({ label: l, go: () => this.setTab(k),");
+patch('منع الانتقال إلى لوحة غير مسموحة',
+  "setTab(k) { this.setState({ tab: k, layersOpen: false },",
+  "setTab(k) { if (!" + ALLOWED + "(k)) { this.tell('هذه اللوحة غير متاحة لحسابك', 1); return; } this.setState({ tab: k, layersOpen: false },");
+patch('العرض القصصي',
+  "playStory(id) { this.setState({ tab: 'story', storyId: id, playing: true },",
+  "playStory(id) { if (!" + ALLOWED + "('story')) { this.tell('هذه اللوحة غير متاحة لحسابك', 1); return; } this.setState({ tab: 'story', storyId: id, playing: true },");
+patch('تسلسل وضع العرض',
+  "const PRES_TABS = ['ceo', 'live', 'dept', 'pmo', 'ops', 'ai', 'plan'];",
+  "const PRES_TABS = (a => (a.length ? a : [window.__TABS[0]]))(['ceo', 'live', 'dept', 'pmo', 'ops', 'ai', 'plan'].filter(" + ALLOWED + "));");
 
 const encoded = JSON.stringify(app).replace(/<\//g, '<\\u002F');
 html = html.replace(TEMPLATE_RE, (m, a, b, c) => a + encoded + c);

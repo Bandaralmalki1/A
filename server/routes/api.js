@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { COLLECTIONS, ROLES, canWrite, uiPerms } from '../perms.js';
+import { COLLECTIONS, canWrite, meOf } from '../perms.js';
 import { PROBLEM_AR, codeProblem, hashCode, nowIso, parseCookies, setCookie, sha, shortId, token } from '../auth.js';
 
 const ID_RE = /^[\w.\-:]{1,120}$/;
@@ -85,7 +85,7 @@ export function apiRoutes({ db, hub, dataDir, throttle }) {
     throttle.clear(ip);
     setCookie(res, 'sid', sid, { maxAge: SESSION_DAYS * 86400, secure: req.secure });
     setCookie(res, 'did', deviceId, { maxAge: 365 * 86400, secure: req.secure });
-    res.json({ ok: true, role: code.role });
+    res.json({ ok: true });
   });
 
   r.post('/logout', (req, res) => {
@@ -95,8 +95,7 @@ export function apiRoutes({ db, hub, dataDir, throttle }) {
     res.json({ ok: true });
   });
 
-  const me = c => ({ id: c.id, name: c.label, role: c.role, roleLabel: ROLES[c.role], perms: uiPerms(c.role), expiresAt: c.expires_at });
-  r.get('/me', requireSession, (req, res) => res.json(me(req.code)));
+  r.get('/me', requireSession, (req, res) => res.json(meOf(req.code)));
 
   r.get('/profiles', requireSession, (req, res) => {
     const out = {};

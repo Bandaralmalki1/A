@@ -10,6 +10,8 @@
     location.replace('/login' + (reason && reason !== 'none' ? '?why=' + encodeURIComponent(reason) : ''));
   }
   if (!ME) { leave(); return; }
+  // اللوحات المسموحة لهذا الكود (null = الكل)؛ يقرؤها كود المنصة عند بدئه
+  window.__TABS = ME.tabs && ME.tabs.length ? ME.tabs : null;
 
   function fail(code, message) { var e = new Error(message || code); e.code = code; return e; }
   async function call(method, url, body, rawType) {
